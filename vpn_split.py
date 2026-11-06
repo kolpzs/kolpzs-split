@@ -1083,21 +1083,10 @@ def netbird_peer_ips(ns: str) -> list[str]:
     except Exception:
         return []
     ips: set[str] = set()
-
-    def walk(node):
-        if isinstance(node, dict):
-            for k, v in node.items():
-                if k.lower() in ("netbird_ip", "netbirdip", "ip") and isinstance(v, str):
-                    ip = v.split("/")[0]
-                    if IPV4_RE.match(ip) and ip.startswith("100."):
-                        ips.add(ip)
-                else:
-                    walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-
-    walk(data)
+    for peer in (data.get("peers") or {}).get("details") or []:
+        ip = str(peer.get("netbirdIp") or "").split("/")[0]
+        if IPV4_RE.match(ip) and ip.startswith("100."):
+            ips.add(ip)
     return sorted(ips)
 
 
