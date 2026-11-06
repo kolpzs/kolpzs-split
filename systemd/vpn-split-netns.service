@@ -1,0 +1,14 @@
+[Unit]
+Description=vpn-split — network namespace do NetBird H2O
+After=network-online.target
+Wants=network-online.target
+Before=vpn-split-nbh2o.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/vpn-split netns-prepare
+ExecStop=/usr/local/sbin/vpn-split netns-destroy
+
+[Install]
+WantedBy=multi-user.target

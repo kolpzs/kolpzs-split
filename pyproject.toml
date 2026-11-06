@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kolpzs-split"
+version = "0.1.0"
+description = "Split routing para múltiplas VPNs no Linux, com perfis automáticos por Wi-Fi"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "kolpzs" }]
+keywords = ["vpn", "wireguard", "netbird", "mullvad", "pritunl", "routing", "split-tunnel"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Networking",
+]
+
+[project.scripts]
+vpn-split = "vpn_split:main"
+
+[tool.setuptools]
+py-modules = ["vpn_split", "vpn_split_ui"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,10 @@
+#!/bin/bash
+# vpn-split: reaplica o perfil automático quando o Wi-Fi muda.
+IFACE="$1"; ACTION="$2"
+[ "$IFACE" = "wlo1" ] || exit 0
+case "$ACTION" in
+  up|down|connectivity-change|dhcp4-change)
+    nohup /usr/local/sbin/vpn-split profile-apply >/var/log/vpn-split/dispatcher.log 2>&1 &
+    ;;
+esac
+exit 0

@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compilar
+        run: python -m py_compile vpn_split.py vpn_split_ui.py
+      - name: Lint (erros reais apenas)
+        run: |
+          pip install ruff
+          ruff check --select=E9,F63,F7,F82 .

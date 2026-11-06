@@ -1,0 +1,13 @@
+[Unit]
+Description=NetBird H2O isolado em network namespace
+Requires=vpn-split-netns.service
+After=vpn-split-netns.service network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/vpn-split/netns-netbird.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=vpn-split — rotas específicas por VPN e exclusões da Mullvad
+Documentation=https://github.com/kolpzs/vpn-split
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/vpn-split watch
+Restart=always
+RestartSec=5
+# Evita brigar com NetworkManager na troca de Wi-Fi
+Nice=5
+IOSchedulingClass=best-effort
+
+[Install]
+WantedBy=multi-user.target

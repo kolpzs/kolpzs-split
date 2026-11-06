@@ -1,0 +1,15 @@
+[Unit]
+Description=vpn-split — DNS do netns NetBird H2O
+Requires=vpn-split-netns.service
+After=vpn-split-netns.service
+Before=vpn-split-nbh2o.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/ip netns exec nbh2o /usr/sbin/dnsmasq --no-daemon --conf-file=/etc/vpn-split/dnsmasq-nbh2o.conf
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

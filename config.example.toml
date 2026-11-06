@@ -1,0 +1,91 @@
+# kolpzs-split — configuração de exemplo.
+#
+# Copie para /etc/vpn-split/config.toml e ajuste os valores.
+# Regra de ouro: a tabela `main` é a fonte da verdade. Toda VPN recebe apenas
+# rotas específicas das suas redes; somente a Mullvad pode ser 0.0.0.0/0.
+
+[general]
+wifi_iface         = "auto"   # "auto" = interface da rota default
+user               = ""       # usuário dono dos profiles do Pritunl (ex.: "seuuser")
+reconcile_interval = 15       # segundos entre reconciliações
+manage_full_tunnel = true     # remove 0.0.0.0/1 e 128.0.0.0/1 das VPNs
+endpoints_via      = "wifi"   # wifi = tráfego externo dos túneis não passa pela Mullvad
+# Quando uma rota de VPN colide EXATAMENTE com uma sub-rede local (ex.: Docker),
+# "vpn" força a VPN; "skip" preserva o local e avisa.
+on_exact_conflict  = "vpn"
+
+# Menor número = maior prioridade quando duas VPNs anunciam o mesmo prefixo.
+[priority]
+wireguard = 20   # interfaces wg_*
+pritunl   = 10   # interfaces tun*
+netbird   = 30   # interface wt0 (pessoal)
+netns     = 40   # NetBird isolado em network namespace
+
+[domains]
+# Domínios que SEMPRE resolvem e saem pela rede Wi-Fi atual.
+wifi_files = []   # arquivos extras, um domínio por linha
+wifi = [
+  "intranet.exemplo.com",
+  "blackboard.exemplo.com",
+]
+
+[endpoints]
+# Hosts cujo IP precisa sair pela Wi-Fi para o túnel conseguir handshake
+# (senão a Mullvad engole o UDP/TCP externo do próprio túnel).
+wifi = [
+  "wg.exemplo.com",
+  "netbird.exemplo.com",
+  "vpn.exemplo.com",
+]
+
+[exclude]
+interfaces = ["wg0-mullvad", "mullvad0"]
+# Prefixos que nunca devem entrar na Mullvad, além dos descobertos.
+extra_cidrs = [
+  "169.254.0.0/16",
+  "224.0.0.0/4",
+]
+
+[mullvad]
+# Marks usados pelo mullvad-exclude; a regra nft faz o kill-switch aceitar
+# o tráfego para as redes internas.
+mark    = "0x6d6f6c65"
+ct_mark = "0x00000f41"
+
+# Segundo cliente NetBird isolado em network namespace (opcional).
+# Os nomes das units systemd seguem vpn-split-<name> / vpn-split-<name>-dns.
+[netns]
+name        = "nbh2o"
+host_iface  = "nbh2o0"
+ns_iface    = "nbh2o1"
+host_ip     = "10.200.0.1/30"
+ns_ip       = "10.200.0.2/30"
+via         = "10.200.0.2"
+mtu         = 1280
+dns         = "10.200.0.2"
+dns_domains = ["~exemplo.local"]
+
+# --------------------------------------------------------------------------- #
+# Perfis automáticos por SSID
+#   * "trusted" -> SSIDs listados (Wi-Fi de confiança): internet pela Wi-Fi,
+#                  Mullvad desligada, NetBirds ligados.
+#   * "default" -> qualquer outro Wi-Fi: internet via Mullvad, NetBirds ligados.
+# wg_casa/Pritunl/etc. ficam manuais (não entram no perfil).
+# --------------------------------------------------------------------------- #
+[profiles]
+trusted_ssids = ["Minha Casa", "Escritorio"]
+
+[profiles.trusted]
+mullvad      = false
+netbird      = true
+netbird_h2o  = true
+
+[profiles.default]
+mullvad      = true
+netbird      = true
+netbird_h2o  = true
+
+[ui]
+bind       = "127.0.0.1"      # só loopback
+port       = 8787
+token_file = "/etc/vpn-split/ui.token"
