@@ -72,18 +72,77 @@ dns_domains = ["~exemplo.local"]
 #   * "default" -> qualquer outro Wi-Fi: internet via Mullvad, NetBirds ligados.
 # wg_casa/Pritunl/etc. ficam manuais (não entram no perfil).
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Registro de serviços de VPN (OPCIONAL — os padrões abaixo já cobrem
+# mullvad, wg_casa, netbird pessoal e netbird H2O).
+#
+# Declare um serviço para cada VPN. Campos:
+#   type     = wireguard | netbird | netbird-netns | pritunl | mullvad | generic
+#   iface    = interface (ou padrão p/ tun*). Se vazio, autodetecção.
+#   priority = menor vence quando duas VPNs anunciam o mesmo prefixo
+#   routes   = CIDRs estáticos deste serviço (além dos descobertos)
+#   control  = unidade systemd ("wg-quick@X", "vpn-split-nbh2o", ...) ou
+#              "netbird" | "mullvad" | "pritunl:<id>"
+#   requires = unidades systemd a subir antes (opcional)
+#   manual   = true => não entra nos perfis (liga/desliga só por ctl/painel)
+#   exit     = true => é a saída de internet (a única que pode ter 0.0.0.0/0)
+# --------------------------------------------------------------------------- #
+[vpn.mullvad]
+type     = "mullvad"
+iface    = "wg0-mullvad"
+priority = 5
+exit     = true
+manual   = true
+control  = "mullvad"
+
+[vpn.wg_casa]
+type     = "wireguard"
+iface    = "wg_casa"
+priority = 20
+manual   = true
+control  = "wg-quick@wg_casa"
+
+[vpn.netbird-pessoal]
+type     = "netbird"
+iface    = "wt0"
+priority = 30
+control  = "netbird"
+
+[vpn.netbird-h2o]
+type     = "netbird-netns"
+iface    = "nbh2o0"
+priority = 40
+netns    = "nbh2o"
+control  = "vpn-split-nbh2o"
+requires = ["vpn-split-netns", "vpn-split-nbh2o-dns"]
+
+# Exemplo de outro serviço (ex.: NordVPN / Tailscale):
+# [vpn.tailscale]
+# type     = "generic"
+# iface    = "tailscale0"
+# priority = 25
+# manual   = true
+# routes   = ["100.64.0.0/10"]
+
+# --------------------------------------------------------------------------- #
+# Perfis automáticos por SSID
+#   * "trusted" -> SSIDs listados (Wi-Fi de confiança): internet pela Wi-Fi,
+#                  Mullvad desligada, VPNs da lista ligadas.
+#   * "default" -> qualquer outro Wi-Fi: internet via Mullvad, VPNs ligadas.
+#
+# O perfil liga/desliga: `vpn` (lista de nomes do registro) e `exit`
+# (nome do serviço de saída, "" = nenhum). Serviços `manual` não são tocados.
+# --------------------------------------------------------------------------- #
 [profiles]
 trusted_ssids = ["Minha Casa", "Escritorio"]
 
 [profiles.trusted]
-mullvad      = false
-netbird      = true
-netbird_h2o  = true
+vpn  = ["netbird-pessoal", "netbird-h2o"]
+exit = ""
 
 [profiles.default]
-mullvad      = true
-netbird      = true
-netbird_h2o  = true
+vpn  = ["netbird-pessoal", "netbird-h2o"]
+exit = "mullvad"
 
 [ui]
 bind       = "127.0.0.1"      # só loopback

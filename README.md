@@ -79,6 +79,25 @@ Ver `docs/ARCHITECTURE.md` para o detalhe.
 - Segundo NetBird em `netns` + mount namespace (dois clientes NetBird colidem
   na tabela `netbird`/regra 110/state.json).
 
+## Adicionar um novo serviço de VPN
+
+Tudo é declarativo em `[vpn.<nome>]` no `config.toml` — veja
+`config.example.toml` para o esquema completo. Exemplo (Tailscale):
+
+```toml
+[vpn.tailscale]
+type     = "generic"      # wireguard | netbird | netbird-netns | pritunl | mullvad | generic
+iface    = "tailscale0"   # se vazio, autodetecção (tun*/wg*)
+priority = 25             # menor vence quando há sobreposição de prefixos
+routes   = ["100.64.0.0/10"]   # CIDRs estáticos além dos descobertos
+control  = "tailscaled"   # unidade systemd (ou "netbird" | "mullvad" | "pritunl:<id>")
+manual   = true           # fora dos perfis (liga/desliga só por ctl/painel)
+```
+
+Os perfis referenciam os serviços por nome (`vpn = [...]`, `exit = "..."`).
+Serviços `manual` não são tocados pelo perfil. Sem `[vpn.*]`, o conjunto padrão
+(mullvad, wg_casa, netbird pessoal e netbird H2O) é usado.
+
 ## Limitações conhecidas
 
 - As marcas `nft` (`0x6d6f6c65`/`0xf41`) são específicas da Mullvad; para outra

@@ -99,6 +99,8 @@ def load_config() -> dict:
     cfg.setdefault("endpoints", {})
     cfg.setdefault("mullvad", {})
     cfg.setdefault("netns", {})
+    cfg.setdefault("vpn", {})
+    cfg.setdefault("profiles", {})
     return cfg
 
 
@@ -209,56 +211,172 @@ class Source:
         self.prefixes: list[tuple[str, str | None, str]] = []
 
 
+# --------------------------------------------------------------------------- #
+# registro de serviços de VPN
+# --------------------------------------------------------------------------- #
+DEFAULT_VPN_REGISTRY: list[dict] = [
+    {"name": "mullvad", "type": "mullvad", "iface": "wg0-mullvad",
+     "priority": 5, "routes": [], "manual": True, "exit": True,
+     "control": "mullvad", "label": "Mullvad", "detail": "saída de internet"},
+    {"name": "wg_casa", "type": "wireguard", "iface": "wg_casa",
+     "priority": 20, "routes": [], "manual": True, "exit": False,
+     "control": "wg-quick@wg_casa", "label": "WireGuard casa",
+     "detail": "10.13.13.0/24 · 192.168.123.0/24"},
+    {"name": "netbird-pessoal", "type": "netbird", "iface": "wt0",
+     "priority": 30, "routes": [], "manual": False, "exit": False,
+     "control": "netbird", "label": "NetBird pessoal",
+     "detail": "100.x/16 (rede pessoal)"},
+    {"name": "netbird-h2o", "type": "netbird-netns", "iface": "nbh2o0",
+     "priority": 40, "routes": [], "manual": False, "exit": False,
+     "control": "vpn-split-nbh2o", "netns": "nbh2o",
+     "requires": ["vpn-split-netns", "vpn-split-nbh2o-dns"],
+     "label": "NetBird H2O", "detail": "isolado no netns nbh2o"},
+]
+
+
+def load_vpn_registry(cfg: dict) -> list[dict]:
+    """Serviços de VPN: os declarados em [vpn.*], ou o conjunto padrão."""
+    reg = cfg.get("vpn", {})
+    if not reg:
+        return [dict(d) for d in DEFAULT_VPN_REGISTRY]
+    out = []
+    for name, v in reg.items():
+        d = dict(v)
+        d["name"] = name
+        d.setdefault("type", "generic")
+        d.setdefault("iface", "")
+        d.setdefault("priority", 50)
+        d.setdefault("routes", [])
+        d.setdefault("manual", False)
+        d.setdefault("exit", False)
+        d.setdefault("control", "")
+        out.append(d)
+    return out
+
+
+def service_active(svc: dict) -> bool:
+    typ = svc.get("type")
+    if typ == "mullvad":
+        return out(["mullvad", "status"]).startswith("Connected")
+    if typ == "netbird-netns":
+        return link_exists(svc.get("iface") or "nbh2o0")
+    iface = svc.get("iface")
+    return bool(iface) and link_exists(iface)
+
+
+def control_vpn(svc: dict, up: bool, pw: str | None = None,
+                user: str | None = None) -> subprocess.CompletedProcess:
+    """Liga/desliga um serviço de VPN conforme seu `control`."""
+    name = svc["name"]
+    ctl = svc.get("control") or ""
+    if ctl.startswith("pritunl:"):
+        pid = ctl.split(":", 1)[1]
+        cmd = ["pritunl-client", "start" if up else "stop", pid]
+        if up and pw:
+            cmd += ["-p", pw]
+        if user:
+            return run(as_user(user, cmd) if os.geteuid() == 0 else cmd)
+        return run(cmd)
+    if ctl == "mullvad":
+        return run(["mullvad", "connect" if up else "disconnect"])
+    if ctl == "netbird":
+        if not up:
+            return run(["netbird", "down"])
+        run(["systemctl", "start", "netbird"])
+        time.sleep(0.5)
+        st = out(["netbird", "status"])
+        if "Management: Disconnected" in st or "NeedsLogin" in st:
+            p = run(["timeout", "10", "netbird", "up"])
+            if "login" in (p.stdout + p.stderr).lower():
+                log(f"{name}: precisa de login (sudo netbird up)", "WARN")
+            return p
+        return run(["netbird", "up"])
+    if not ctl:
+        log(f"{name}: sem 'control' definido; ignorando", "WARN")
+        return subprocess.CompletedProcess([], 1)
+    # unidade systemd (wg-quick@X, vpn-split-nbh2o, ...)
+    if up:
+        for u in svc.get("requires") or []:
+            run(["systemctl", "start", u])
+    return run(["systemctl", "start" if up else "stop", ctl])
+
+
 def build_sources(cfg: dict, wifi: str) -> list[Source]:
     gen = cfg["general"]
     excl = set(cfg["exclude"].get("interfaces", []))
-    prio = cfg["priority"]
+    netns_cfg = cfg["netns"]
+    registry = load_vpn_registry(cfg)
+    main_routes = ipj("route", "show", "table", "main")
     sources: list[Source] = []
 
-    if gen.get("manage_netbird", True) and link_exists("wt0"):
-        sources.append(Source("netbird-pessoal", "wt0", prio.get("netbird", 30), "netbird"))
+    for svc in registry:
+        typ = svc.get("type")
+        if typ == "mullvad":
+            continue  # saída de internet, não é fonte de rotas
+        prio = int(svc.get("priority", 50))
+        routes = list(svc.get("routes") or [])
 
-    if gen.get("manage_netns_netbird", True):
-        ns_name = cfg["netns"].get("name", "nbh2o")
-        host_if = cfg["netns"].get("host_iface", "nbh2o0")
-        if link_exists(host_if):
-            sources.append(Source("netbird-h2o", host_if, prio.get("netns", 40), "netns",
-                                  ns=ns_name, via=cfg["netns"].get("via", "10.200.0.2")))
-
-    for wg in wg_ifaces(excl):
-        sources.append(Source(wg, wg, prio.get("wireguard", 20), "wg"))
-
-    for tun in tunnel_ifaces(r"^tun\d+$", excl):
-        sources.append(Source(tun, tun, prio.get("pritunl", 10), "pritunl"))
-
-    # redes forçadas por config: "10.50.0.0/16" = "wg_casa"
-    static = cfg.get("networks", {})
-
-    main_routes = ipj("route", "show", "table", "main")
-    for s in sources:
-        if s.kind == "netns":
+        if typ == "netbird-netns":
+            host_if = svc.get("iface") or netns_cfg.get("host_iface", "nbh2o0")
+            ns = svc.get("netns") or netns_cfg.get("name", "nbh2o")
+            via = netns_cfg.get("via", "10.200.0.2")
+            if not link_exists(host_if):
+                continue
+            s = Source(svc["name"], host_if, prio, "netns", ns=ns, via=via)
             import ipaddress
             ns_subnet = str(ipaddress.ip_interface(
-                cfg["netns"].get("host_ip", "10.200.0.1/30")).network)
-            inner_main = ipj("route", "show", "table", "main", ns=s.ns)
-            inner_nb = table_routes("netbird", ns=s.ns)
-            for pfx, _gw, _dev in route_prefixes(s.iface, inner_main) + \
+                netns_cfg.get("host_ip", "10.200.0.1/30")).network)
+            inner_main = ipj("route", "show", "table", "main", ns=ns)
+            inner_nb = table_routes("netbird", ns=ns)
+            for pfx, _gw, _dev in route_prefixes(host_if, inner_main) + \
                     route_prefixes("wt0", inner_nb) + route_prefixes("wt1", inner_nb):
                 if pfx == ns_subnet:
                     continue
-                s.prefixes.append((pfx, s.via, s.iface))
-            for ip in netbird_peer_ips(s.ns):
-                s.prefixes.append((f"{ip}/32", s.via, s.iface))
+                s.prefixes.append((pfx, via, host_if))
+            for ip in netbird_peer_ips(ns):
+                s.prefixes.append((f"{ip}/32", via, host_if))
+            for cidr in routes:
+                s.prefixes.append((cidr, via, host_if))
+            sources.append(s)
             continue
-        routes = route_prefixes(s.iface, main_routes)
-        if s.kind == "netbird":
-            routes += route_prefixes(s.iface, table_routes("netbird"))
-            routes += [(p, None, s.iface) for p in iface_subnets(s.iface)]
-        if s.kind == "wg":
-            routes += [(p, None, s.iface) for p in iface_subnets(s.iface)]
-        s.prefixes = routes
 
-    for cidr, target in static.items():
+        # interfaces deste serviço
+        iface = svc.get("iface")
+        if typ == "wireguard":
+            ifaces = [iface] if iface else wg_ifaces(excl)
+        elif typ == "netbird":
+            ifaces = [iface] if (iface and link_exists(iface)) else \
+                (["wt0"] if link_exists("wt0") else [])
+        elif typ in ("pritunl", "openvpn", "generic"):
+            ifaces = [iface] if iface else tunnel_ifaces(
+                iface or r"^(tun|tap)\d+$", excl)
+        else:
+            ifaces = [iface] if iface else []
+
+        for dev in ifaces:
+            if not dev or not link_exists(dev):
+                continue
+            s = Source(svc["name"], dev, prio, typ)
+            rr = route_prefixes(dev, main_routes)
+            if typ == "netbird":
+                rr += route_prefixes(dev, table_routes("netbird"))
+            rr += [(p, None, dev) for p in iface_subnets(dev)]
+            for cidr in routes:
+                rr.append((cidr, None, dev))
+            s.prefixes = rr
+            sources.append(s)
+
+    # autodetecção residual: interfaces wg*/tun* não declaradas (outros serviços)
+    covered = {s.iface for s in sources}
+    for wg in wg_ifaces(excl):
+        if wg not in covered:
+            sources.append(Source(wg, wg, 20, "wg"))
+    for tun in tunnel_ifaces(r"^tun\d+$", excl):
+        if tun not in covered:
+            sources.append(Source(tun, tun, 10, "pritunl"))
+
+    # [networks] estático legado: "10.50.0.0/16" = "wg_casa"
+    for cidr, target in (cfg.get("networks") or {}).items():
         for s in sources:
             if target in (s.name, s.iface):
                 s.prefixes.append((cidr, s.via, s.iface))
@@ -763,20 +881,21 @@ def collect_status(cfg: dict) -> dict:
     mull_connected = mull.startswith("Connected")
 
     profiles = pritunl_profiles(desktop_user(cfg))
-    controls = [
-        {"target": "wg_casa", "name": "WireGuard casa",
-         "active": link_exists("wg_casa"),
-         "detail": "10.13.13.0/24 · 192.168.123.0/24", "note": ""},
-        {"target": "netbird", "name": "NetBird pessoal",
-         "active": link_exists("wt0"),
-         "detail": "100.96.0.0/16 · 192.168.123.0/24", "note": ""},
-        {"target": "netbird-h2o", "name": "NetBird H2O",
-         "active": ns_exists, "detail": "isolado no netns nbh2o",
-         "note": ns_status.replace("Daemon status: ", "")},
-        {"target": "mullvad", "name": "Mullvad",
-         "active": mull_connected,
-         "detail": "saída de internet (manual)", "note": ""},
-    ]
+    controls = []
+    for svc in load_vpn_registry(cfg):
+        nm = svc["name"]
+        note = ""
+        if svc.get("type") == "netbird-netns" and ns_status:
+            note = ns_status.replace("Daemon status: ", "")
+        if svc.get("exit"):
+            note = "saída de internet" + (f" · {note}" if note else "")
+        controls.append({
+            "target": nm,
+            "name": svc.get("label") or nm,
+            "active": service_active(svc),
+            "detail": svc.get("detail") or (svc.get("iface") or svc.get("type")),
+            "note": note,
+        })
     for pr in profiles:
         controls.append({
             "target": f"pritunl:{pr['id']}", "name": pr["name"],
@@ -1116,31 +1235,36 @@ def clean_routes_for_iface(iface: str, prefixes: list[str]) -> None:
 
 
 def ctl(cfg: dict, target: str, up: bool, pw: str | None = None) -> int:
-    """Liga/desliga uma VPN e reconcilia."""
-    if target.startswith("pritunl:"):
-        pid = target.split(":", 1)[1]
-        cmd = ["pritunl-client", "start" if up else "stop", pid]
-        if up and pw:
-            cmd += ["-p", pw]
-        u = desktop_user(cfg)
-        p = run(as_user(u, cmd) if (os.geteuid() == 0 and u) else cmd)
-    elif target.startswith("wg"):
-        iface = target.split(":", 1)[1] if ":" in target else "wg_casa"
-        if up:
-            clean_routes_for_iface(iface, wg_allowed_ips(iface))
-            p = run(["systemctl", "start", f"wg-quick@{iface}"])
-        else:
-            p = run(["systemctl", "stop", f"wg-quick@{iface}"])
-    elif target == "netbird":
-        p = run(["netbird", "up" if up else "down"])
-    elif target == "netbird-h2o":
-        p = run(["systemctl", "start" if up else "stop", "vpn-split-nbh2o"])
-    elif target == "mullvad":
-        p = run(["mullvad", "connect" if up else "disconnect"])
-    else:
-        log(f"alvo desconhecido: {target}", "ERROR")
-        return 2
+    """Liga/desliga uma VPN (por nome do registro ou alvo legado) e reconcilia."""
+    registry = load_vpn_registry(cfg)
+    svc = next((s for s in registry if s["name"] == target), None)
 
+    if svc is None:  # alvos legados / dinâmicos
+        if target.startswith("pritunl:"):
+            svc = {"name": target, "type": "pritunl", "iface": "", "control": target}
+        elif target.startswith("wg"):
+            iface = target.split(":", 1)[1] if ":" in target else "wg_casa"
+            svc = {"name": target, "type": "wireguard", "iface": iface,
+                   "control": f"wg-quick@{iface}"}
+        elif target == "netbird":
+            svc = {"name": "netbird", "type": "netbird", "control": "netbird"}
+        elif target == "netbird-h2o":
+            svc = {"name": "netbird-h2o", "type": "netbird-netns",
+                   "control": "vpn-split-nbh2o",
+                   "requires": ["vpn-split-netns", "vpn-split-nbh2o-dns"]}
+        elif target == "mullvad":
+            svc = {"name": "mullvad", "type": "mullvad", "control": "mullvad"}
+        else:
+            log(f"alvo desconhecido: {target}", "ERROR")
+            return 2
+
+    # WireGuard: limpa rotas conflitantes antes de subir (evita "File exists")
+    if up and svc.get("type") == "wireguard":
+        iface = svc.get("iface") or (target.split(":", 1)[1] if ":" in target else target)
+        if iface:
+            clean_routes_for_iface(iface, wg_allowed_ips(iface))
+
+    p = control_vpn(svc, up, pw, user=desktop_user(cfg))
     if p.returncode != 0:
         log(f"{target}: falhou ({p.stderr.strip() or p.stdout.strip()})", "WARN")
     time.sleep(1)
@@ -1192,28 +1316,6 @@ def active_profile(cfg: dict) -> tuple[str, str, dict]:
     return name, ssid, profs.get(name, {})
 
 
-def ensure_netbird_personal(up: bool) -> None:
-    if not up:
-        run(["netbird", "down"])
-        return
-    run(["systemctl", "start", "netbird"])
-    time.sleep(0.5)
-    st = out(["netbird", "status"])
-    if "Management: Disconnected" in st or "NeedsLogin" in st:
-        p = run(["timeout", "10", "netbird", "up"])
-        if "login" in (p.stdout + p.stderr).lower() or "NeedsLogin" in st:
-            log("NetBird pessoal precisa de login (sudo netbird up)", "WARN")
-
-
-def ensure_netbird_h2o(up: bool) -> None:
-    if not up:
-        run(["systemctl", "stop", "vpn-split-nbh2o"])
-        return
-    run(["systemctl", "start", "vpn-split-netns"])
-    run(["systemctl", "start", "vpn-split-nbh2o-dns"])
-    run(["systemctl", "start", "vpn-split-nbh2o"])
-
-
 def apply_profile(cfg: dict, *, force: bool = False) -> tuple[str, bool]:
     """Aplica o perfil correspondente ao SSID atual. Retorna (nome, mudou)."""
     name, ssid, prof = active_profile(cfg)
@@ -1223,18 +1325,32 @@ def apply_profile(cfg: dict, *, force: bool = False) -> tuple[str, bool]:
         return name, False
 
     log(f"perfil '{name}' para SSID '{ssid}'")
-    want_mullvad = bool(prof.get("mullvad", False))
-    want_nb = bool(prof.get("netbird", True))
-    want_h2o = bool(prof.get("netbird_h2o", True))
+    registry = load_vpn_registry(cfg)
+    user = desktop_user(cfg)
 
-    ensure_netbird_personal(want_nb)
-    ensure_netbird_h2o(want_h2o)
+    # quais serviços o perfil quer ligados + qual é a saída (exit)
+    if "vpn" in prof:
+        want = set(prof.get("vpn") or [])
+        exit_name = prof.get("exit") or ""
+    else:  # compat com o esquema antigo (mullvad/netbird/netbird_h2o)
+        want = set()
+        if prof.get("netbird", True):
+            want.add("netbird-pessoal")
+        if prof.get("netbird_h2o", True):
+            want.add("netbird-h2o")
+        exit_name = "mullvad" if prof.get("mullvad", False) else ""
 
-    m = out(["mullvad", "status"]).strip()
-    if want_mullvad and not m.startswith("Connected"):
-        run(["mullvad", "connect"])
-    elif not want_mullvad and m.startswith("Connected"):
-        run(["mullvad", "disconnect"])
+    for svc in registry:
+        nm = svc["name"]
+        if svc.get("exit"):
+            up = nm == exit_name
+        elif nm in want:
+            up = True
+        elif svc.get("manual"):
+            continue  # manual e fora do perfil: não mexe
+        else:
+            up = False
+        control_vpn(svc, up, user=user)
 
     state["profile"] = {"name": name, "ssid": ssid, "ts": time.time()}
     save_state(state)
