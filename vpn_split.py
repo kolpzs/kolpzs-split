@@ -222,15 +222,15 @@ DEFAULT_VPN_REGISTRY: list[dict] = [
      "priority": 20, "routes": [], "manual": True, "exit": False,
      "control": "wg-quick@wg_casa", "label": "WireGuard casa",
      "detail": "10.13.13.0/24 · 192.168.123.0/24"},
-    {"name": "netbird-pessoal", "type": "netbird", "iface": "wt0",
+    {"name": "netbird-h2o", "type": "netbird", "iface": "wt0",
      "priority": 30, "routes": [], "manual": False, "exit": False,
-     "control": "netbird", "label": "NetBird pessoal",
-     "detail": "100.x/16 (rede pessoal)"},
-    {"name": "netbird-h2o", "type": "netbird-netns", "iface": "nbh2o0",
+     "control": "netbird", "label": "NetBird H2O",
+     "detail": "host (wt0) — netbird.h2oinnovation.digital"},
+    {"name": "netbird-pessoal", "type": "netbird-netns", "iface": "nbh2o0",
      "priority": 40, "routes": [], "manual": False, "exit": False,
      "control": "vpn-split-nbh2o", "netns": "nbh2o",
      "requires": ["vpn-split-netns", "vpn-split-nbh2o-dns"],
-     "label": "NetBird H2O", "detail": "isolado no netns nbh2o"},
+     "label": "NetBird pessoal", "detail": "netns — netbird.kolpzs.com"},
 ]
 
 
@@ -835,6 +835,104 @@ def pritunl_profiles(user: str | None = None) -> list[dict]:
     return res
 
 
+def netbird_json(ns: str | None = None, sock: str | None = None) -> dict | None:
+    cmd = ["netbird"]
+    if sock:
+        cmd += ["--daemon-addr", sock]
+    cmd += ["status", "--json"]
+    p = run(cmd, ns=ns)
+    if p.returncode != 0 or not p.stdout.strip():
+        return None
+    try:
+        return json.loads(p.stdout)
+    except Exception:
+        return None
+
+
+def wg_peer_ages(iface: str) -> list[dict]:
+    """Pares WireGuard com a idade do handshake (em segundos)."""
+    p = run(["wg", "show", iface, "latest-handshakes"])
+    now = time.time()
+    res = []
+    for line in p.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].isdigit():
+            res.append({"pubkey": parts[0][:12] + "…",
+                        "age": max(0, int(now - int(parts[1])))})
+    return res
+
+
+def live_status(cfg: dict) -> dict:
+    """Estado 'vivo' das conexões: serviços + peers (para a tela em tempo real)."""
+    registry = load_vpn_registry(cfg)
+    user = desktop_user(cfg)
+    host_nb = netbird_json()
+    ns = cfg["netns"].get("name", "nbh2o")
+    ns_exists = ns in out(["ip", "netns", "list"]).split()
+    netns_nb = netbird_json(ns=ns, sock="unix:///run/vpn-split/netbird-h2o.sock") \
+        if ns_exists else None
+
+    def nb_entry(nb):
+        e = {"connected": False, "self_ip": "", "fqdn": "", "peers": []}
+        if not nb:
+            return e
+        e["connected"] = bool((nb.get("management") or {}).get("connected"))
+        e["self_ip"] = nb.get("netbirdIp") or ""
+        e["fqdn"] = nb.get("fqdn") or ""
+        for pr in (nb.get("peers") or {}).get("details") or []:
+            lat = pr.get("latency")
+            lat_s = ""
+            if isinstance(lat, int) and lat > 0:
+                lat_s = f"{lat/1_000_000:.0f} ms" if lat >= 1_000_000 else f"{lat} ms"
+            e["peers"].append({
+                "name": pr.get("fqdn") or (pr.get("netbirdIp") or ""),
+                "ip": pr.get("netbirdIp") or "",
+                "status": pr.get("status") or "Disconnected",
+                "latency": lat_s or pr.get("latency") or "",
+            })
+        return e
+
+    services = []
+    for svc in registry:
+        typ = svc.get("type")
+        entry = {"name": svc["name"], "label": svc.get("label") or svc["name"],
+                 "type": typ, "connected": False, "detail": "",
+                 "self_ip": "", "fqdn": "", "peers": []}
+        if typ == "netbird":
+            entry.update(nb_entry(host_nb))
+        elif typ == "netbird-netns":
+            entry.update(nb_entry(netns_nb))
+            entry["detail"] = f"netns {ns}"
+        elif typ == "wireguard":
+            iface = svc.get("iface") or "wg_casa"
+            up = link_exists(iface)
+            entry["connected"] = up
+            entry["detail"] = iface
+            if up:
+                ages = wg_peer_ages(iface)
+                entry["peers"] = [{
+                    "name": a["pubkey"], "ip": "", "status":
+                    "up" if a["age"] < 180 else "down", "age": a["age"],
+                } for a in ages]
+                entry["connected"] = any(a["age"] < 180 for a in ages)
+        elif typ == "mullvad":
+            m = out(["mullvad", "status"]).strip()
+            entry["connected"] = m.startswith("Connected")
+            entry["detail"] = m.split("\n")[1].strip() \
+                if "\n" in m and entry["connected"] else ""
+        elif typ == "pritunl":
+            profs = pritunl_profiles(user)
+            entry["connected"] = any(p["state"] == "Active" for p in profs)
+            entry["detail"] = ", ".join(
+                f"{p['name']}: {'on' if p['state'] == 'Active' else 'off'}"
+                for p in profs)
+        else:
+            entry["connected"] = service_active(svc)
+            entry["detail"] = svc.get("iface") or svc.get("control") or ""
+        services.append(entry)
+    return {"services": services, "ts": time.time()}
+
+
 def collect_status(cfg: dict) -> dict:
     dr = default_route()
     wifi = cfg["general"].get("wifi_iface", "auto")
@@ -1141,27 +1239,45 @@ def netns_destroy(cfg: dict, *, dry_run: bool = False) -> int:
 
 
 def ensure_netbird_h2o_config(*, dry_run: bool = False) -> None:
+    """Importa o profile do NetBird que roda no netns (re-importa se a chave mudou)."""
     dst = Path("/etc/vpn-split/netbird-h2o/config.json")
-    if dst.exists():
-        return
-    for cand in glob.glob("/var/lib/netbird/*/*.json"):
+    # qual profile roda no netns: "H2O" (padrão) ou "pessoal" (default.json)
+    try:
+        prof = load_config().get("netns", {}).get("profile", "H2O")
+    except Exception:
+        prof = "H2O"
+
+    cands = []
+    if prof == "pessoal":
+        cands = ["/var/lib/netbird/default.json"]
+    else:
+        cands = sorted(glob.glob("/var/lib/netbird/*/*.json"))
+
+    for cand in cands:
         try:
             data = json.loads(Path(cand).read_text())
         except Exception:
             continue
-        if data.get("Name") != "H2O":
+        if prof != "pessoal" and data.get("Name") != prof:
             continue
         data["DisableDNS"] = True          # DNS é tratado pelo host/dnsmasq
         data["DisableNotifications"] = True
+        # re-importa se a chave mudou (ex.: profile re-adicionado)
+        if dst.exists():
+            try:
+                if json.loads(dst.read_text()).get("PrivateKey") == data.get("PrivateKey"):
+                    return
+            except Exception:
+                pass
         if dry_run:
             log(f"DRY criaria {dst} a partir de {cand}")
             return
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(json.dumps(data, indent=2))
         os.chmod(dst, 0o600)
-        log(f"config H2O importada de {cand}")
+        log(f"config do netns importada de {cand} (profile '{prof}')")
         return
-    log("config H2O não encontrada em /var/lib/netbird/*/*.json", "WARN")
+    log(f"profile '{prof}' não encontrado em /var/lib/netbird", "WARN")
 
 
 def netns_status(cfg: dict) -> int:

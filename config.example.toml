@@ -63,7 +63,9 @@ ns_ip       = "10.200.0.2/30"
 via         = "10.200.0.2"
 mtu         = 1280
 dns         = "10.200.0.2"
-dns_domains = ["~exemplo.local"]
+# qual profile do NetBird roda no netns: "H2O" ou "pessoal" (default.json)
+profile     = "pessoal"
+dns_domains = []
 
 # --------------------------------------------------------------------------- #
 # Perfis automáticos por SSID

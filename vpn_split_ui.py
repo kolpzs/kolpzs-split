@@ -112,6 +112,16 @@ HTML = r"""<!doctype html>
              padding:24px; width:340px; display:flex; flex-direction:column; gap:12px; }
   .gatebox input { background:#0b0d11; color:var(--txt); border:1px solid var(--line);
                    border-radius:8px; padding:9px; font-family:ui-monospace,monospace; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex:none; }
+  .dot.on { background:#3fb950; box-shadow:0 0 6px #3fb950; }
+  .dot.off { background:#d9534f; }
+  .dot.idle { background:#d7a62e; }
+  .livegrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+  .livecard { background:#12151b; border:1px solid var(--line); border-radius:10px;
+              padding:12px; display:flex; flex-direction:column; gap:6px; }
+  .livecard.on { border-color:rgba(63,185,80,.5); }
+  .peer { font-size:12px; display:flex; align-items:center; gap:6px; padding:3px 0;
+          border-top:1px solid #1d212b; }
 </style></head>
 <body>
 <div id="gate" class="gate" style="display:none">
@@ -137,6 +147,11 @@ HTML = r"""<!doctype html>
   <div id="banner"></div>
   <div class="err" id="err"></div>
   <div class="cards" id="cards"></div>
+
+  <section>
+    <h2>Conexões (tempo real)</h2>
+    <div class="livegrid" id="live"></div>
+  </section>
 
   <div class="grid2">
     <section>
@@ -298,8 +313,34 @@ async function saveCfg() {
   } catch (e) { $('cfgmsg').textContent = 'erro: ' + e.message; }
 }
 
+async function refreshLive() {
+  if (!gateCheck()) return;
+  try {
+    const d = await api('/api/live');
+    $('live').innerHTML = (d.services || []).map(s => {
+      const cls = s.connected ? 'on' : 'off';
+      const peers = (s.peers || []).length
+        ? s.peers.map(p => {
+            const ps = (p.status === 'Connected' || p.status === 'up') ? 'on'
+                     : (p.status === 'Idle') ? 'idle' : 'off';
+            const info = (p.age != null) ? p.age + 's' : (p.latency || p.status || '');
+            return '<div class="peer"><span class="dot ' + ps + '"></span> '
+                 + esc(p.name || p.ip)
+                 + ' <span class="muted">' + esc(p.ip) + ' ' + esc(info) + '</span></div>';
+          }).join('')
+        : '<div class="peer muted">sem peers</div>';
+      return '<div class="livecard ' + cls + '">'
+           + '<div class="row"><strong>' + esc(s.label) + '</strong>'
+           + '<span class="dot ' + cls + '"></span></div>'
+           + '<div class="muted">' + esc(s.self_ip || s.fqdn || s.detail || s.type) + '</div>'
+           + peers + '</div>';
+    }).join('') || '<div class="muted">carregando…</div>';
+  } catch (e) { $('live').innerHTML = ''; }
+}
+
 refresh(); loadCfg();
 setInterval(refresh, 5000);
+setInterval(refreshLive, 5000);
 </script>
 </body></html>
 """
@@ -358,6 +399,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(200, {"text": CONFIG.read_text()})
                 elif self._path() == "/api/log":
                     self._json(200, {"log": log_tail()})
+                elif self._path() == "/api/live":
+                    self._json(200, vs.live_status(vs.load_config()))
                 else:
                     self._json(404, {"error": "not found"})
             else:
