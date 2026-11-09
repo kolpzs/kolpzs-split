@@ -102,7 +102,12 @@ HTML = r"""<!doctype html>
 
     h1 { margin: 0 6px 0 0; font-size: 17px; letter-spacing: .3px; }
 
-    header .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    header .muted {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     /* ---------- layout ---------- */
     main {
@@ -296,22 +301,41 @@ HTML = r"""<!doctype html>
       display: flex;
       flex-direction: column;
       gap: 6px;
+      min-width: 0;
       padding: 12px;
+      overflow: hidden;
       background: var(--surface-2);
       border: 1px solid var(--line);
       border-radius: 10px;
     }
     .livecard.on { border-color: rgba(63, 185, 80, .5); }
 
+    .livecard .muted, .card .muted {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
     .peer {
       display: flex;
       align-items: center;
       gap: 6px;
+      min-width: 0;
       padding: 4px 0;
       font-size: 12px;
       border-top: 1px solid var(--line-2);
     }
     .peer:first-child { border-top: none; }
+
+    .pname {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pip, .pmeta { flex: none; }
+    .pip { color: var(--muted); }
+    .pmeta { color: var(--muted); font-variant-numeric: tabular-nums; }
 
     .dot {
       width: 9px;
@@ -592,9 +616,12 @@ HTML = r"""<!doctype html>
                 const ps = (p.status === 'Connected' || p.status === 'up') ? 'on'
                   : (p.status === 'Idle') ? 'idle' : 'off';
                 const info = (p.age != null) ? p.age + 's' : (p.latency || p.status || '');
-                return '<div class="peer"><span class="dot ' + ps + '"></span> ' +
-                  esc(p.name || p.ip) +
-                  ' <span class="muted">' + esc(p.ip) + ' ' + esc(info) + '</span></div>';
+                return '<div class="peer">' +
+                  '<span class="dot ' + ps + '"></span>' +
+                  '<span class="pname" title="' + esc(p.name || p.ip) + '">' + esc(p.name || p.ip) + '</span>' +
+                  '<span class="pip">' + esc(p.ip) + '</span>' +
+                  '<span class="pmeta">' + esc(info) + '</span>' +
+                  '</div>';
               }).join('')
             : '<div class="peer muted">sem peers</div>';
           return '<div class="livecard ' + cls + '">' +
