@@ -51,298 +51,570 @@ def load_token() -> str:
 TOKEN = load_token()
 
 HTML = r"""<!doctype html>
-<html lang="pt-BR"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>vpn-split</title>
-<style>
-  :root { color-scheme: dark; --bg:#0f1115; --card:#171a21; --line:#262b36;
-          --txt:#e6e8ee; --muted:#8b93a7; --ok:#2ea043; --bad:#d9534f;
-          --accent:#4f8cff; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt);
-         font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  header { position:sticky; top:0; z-index:5; background:#12151b;
-           border-bottom:1px solid var(--line); padding:14px 22px;
-           display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  h1 { font-size:17px; margin:0 10px 0 0; letter-spacing:.3px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.12em;
-       color:var(--muted); margin:0 0 10px; }
-  main { padding:20px 22px 60px; max-width:1180px; }
-  .pill { padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
-  .pon { background:rgba(46,160,67,.18); color:#5fd374; }
-  .poff { background:rgba(217,83,79,.15); color:#ff8b87; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(255px,1fr));
-           gap:12px; margin-bottom:22px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
-          padding:14px; display:flex; flex-direction:column; gap:8px; }
-  .card.on { border-color:rgba(46,160,67,.45); }
-  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .muted { color:var(--muted); font-size:12.5px; }
-  .note { font-size:12px; color:#d7b66b; word-break:break-word; }
-  .actions { margin-top:auto; display:flex; gap:8px; }
-  button { background:#232836; color:var(--txt); border:1px solid var(--line);
-           border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; }
-  button:hover { border-color:#3a4254; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button.danger { background:transparent; border-color:rgba(217,83,79,.5); color:#ff8b87; }
-  button:disabled { opacity:.45; cursor:wait; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:12px;
-            padding:16px; margin-bottom:16px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
-  th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; }
-  tr:last-child td { border-bottom:none; }
-  code,pre { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
-  pre { background:#0b0d11; border:1px solid var(--line); border-radius:8px;
-        padding:12px; overflow:auto; max-height:260px; font-size:12px; }
-  textarea { width:100%; min-height:260px; background:#0b0d11; color:var(--txt);
-             border:1px solid var(--line); border-radius:8px; padding:12px;
-             font-family:ui-monospace,monospace; font-size:12.5px; }
-  .banner { background:rgba(215,182,107,.12); border:1px solid rgba(215,182,107,.4);
-            color:#e8cd8b; padding:10px 14px; border-radius:10px; margin-bottom:16px; }
-  .err { color:#ff8b87; font-size:12.5px; }
-  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  @media (max-width:800px){ .grid2 { grid-template-columns:1fr; } }
-  .switch { display:flex; gap:8px; align-items:center; color:var(--muted);
-            font-size:12.5px; }
-  a { color:var(--accent); }
-  .gate { position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:50;
-          display:flex; align-items:center; justify-content:center; }
-  .gatebox { background:var(--card); border:1px solid var(--line); border-radius:12px;
-             padding:24px; width:340px; display:flex; flex-direction:column; gap:12px; }
-  .gatebox input { background:#0b0d11; color:var(--txt); border:1px solid var(--line);
-                   border-radius:8px; padding:9px; font-family:ui-monospace,monospace; }
-  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex:none; }
-  .dot.on { background:#3fb950; box-shadow:0 0 6px #3fb950; }
-  .dot.off { background:#d9534f; }
-  .dot.idle { background:#d7a62e; }
-  .livegrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
-  .livecard { background:#12151b; border:1px solid var(--line); border-radius:10px;
-              padding:12px; display:flex; flex-direction:column; gap:6px; }
-  .livecard.on { border-color:rgba(63,185,80,.5); }
-  .peer { font-size:12px; display:flex; align-items:center; gap:6px; padding:3px 0;
-          border-top:1px solid #1d212b; }
-</style></head>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>vpn-split</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1115;
+      --surface: #171a21;
+      --surface-2: #12151b;
+      --line: #262b36;
+      --line-2: #1d212b;
+      --txt: #e6e8ee;
+      --muted: #8b93a7;
+      --accent: #4f8cff;
+      --ok: #2ea043;
+      --ok-txt: #5fd374;
+      --warn: #d7a62e;
+      --bad: #d9534f;
+      --bad-txt: #ff8b87;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--txt);
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* ---------- header ---------- */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding: 14px 22px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 { margin: 0 6px 0 0; font-size: 17px; letter-spacing: .3px; }
+
+    header .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ---------- layout ---------- */
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 22px 64px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    section {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .muted { color: var(--muted); font-size: 12.5px; }
+    .err { color: var(--bad-txt); font-size: 12.5px; }
+    .note { font-size: 12px; color: var(--warn); word-break: break-word; }
+    .spacer { flex: 1; }
+
+    /* ---------- cards / pills / buttons ---------- */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .card.on { border-color: rgba(46, 160, 67, .45); }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .pill {
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .pill.pon { background: rgba(46, 160, 67, .18); color: var(--ok-txt); }
+    .pill.poff { background: rgba(217, 83, 79, .15); color: var(--bad-txt); }
+
+    .actions { display: flex; gap: 8px; margin-top: auto; }
+
+    button {
+      padding: 7px 13px;
+      font-size: 13px;
+      color: var(--txt);
+      background: #232836;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+    button:hover { border-color: #3a4254; }
+    button:disabled { opacity: .45; cursor: wait; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.danger { background: transparent; border-color: rgba(217, 83, 79, .5); color: var(--bad-txt); }
+
+    .switch {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12.5px;
+    }
+
+    /* ---------- tabelas ---------- */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+    th, td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      font-size: 11.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    /* ---------- código / formulário ---------- */
+    code, pre, textarea { font-family: var(--mono); }
+
+    pre {
+      max-height: 260px;
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      font-size: 12px;
+      background: #0b0d11;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 260px;
+      padding: 12px;
+      font-size: 12.5px;
+      color: var(--txt);
+      background: #0b0d11;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+    }
+
+    .banner {
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      color: #e8cd8b;
+      background: rgba(215, 182, 107, .12);
+      border: 1px solid rgba(215, 182, 107, .4);
+      border-radius: 10px;
+    }
+
+    a { color: var(--accent); }
+
+    /* ---------- gate (token) ---------- */
+    .gate {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .72);
+    }
+
+    .gatebox {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 340px;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .gatebox h2 { margin: 0; }
+    .gatebox p { margin: 0; }
+    .gatebox input {
+      padding: 9px;
+      font-family: var(--mono);
+      color: var(--txt);
+      background: #0b0d11;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+    }
+
+    /* ---------- conexões (tempo real) ---------- */
+    .livegrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .livecard {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .livecard.on { border-color: rgba(63, 185, 80, .5); }
+
+    .peer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      font-size: 12px;
+      border-top: 1px solid var(--line-2);
+    }
+    .peer:first-child { border-top: none; }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      flex: none;
+      border-radius: 50%;
+    }
+    .dot.on { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+    .dot.off { background: var(--bad); }
+    .dot.idle { background: var(--warn); }
+
+    @media (max-width: 800px) {
+      .grid2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
 <body>
-<div id="gate" class="gate" style="display:none">
-  <div class="gatebox">
-    <h2 style="margin:0">Token de acesso</h2>
-    <p class="muted" style="margin:0">Informe o token do painel
-      (<code>/etc/vpn-split/ui.token</code>).</p>
-    <input id="tok" type="password" placeholder="token" autocomplete="off">
-    <button class="primary" onclick="setToken()">Entrar</button>
-    <div class="err" id="gateerr"></div>
-  </div>
-</div>
-<header>
-  <h1>vpn-split</h1>
-  <span class="muted" id="wifi">carregando…</span>
-  <span class="muted" id="profile"></span>
-  <span style="flex:1"></span>
-  <label class="switch"><input type="checkbox" id="fb" onchange="setFallback(this.checked)"> fallback UDP (túneis via Mullvad)</label>
-  <button onclick="act('profile-apply')">Reaplicar perfil</button>
-  <button onclick="act('apply')">Aplicar</button>
-</header>
-<main>
-  <div id="banner"></div>
-  <div class="err" id="err"></div>
-  <div class="cards" id="cards"></div>
-
-  <section>
-    <h2>Conexões (tempo real)</h2>
-    <div class="livegrid" id="live"></div>
-  </section>
-
-  <div class="grid2">
-    <section>
-      <h2>Rotas administradas (main)</h2>
-      <table><thead><tr><th>Prefixo</th><th>Via</th><th>Dev</th><th>Origem</th></tr></thead>
-      <tbody id="routes"></tbody></table>
-      <div id="fulltunnel"></div>
-    </section>
-    <section>
-      <h2>Saúde</h2>
-      <table><tbody id="health"></tbody></table>
-      <div class="muted" id="dns" style="margin-top:10px"></div>
-    </section>
+  <div id="gate" class="gate" style="display:none">
+    <div class="gatebox">
+      <h2>Token de acesso</h2>
+      <p class="muted">Informe o token do painel (<code>/etc/vpn-split/ui.token</code>).</p>
+      <input id="tok" type="password" placeholder="token" autocomplete="off">
+      <button class="primary" onclick="setToken()">Entrar</button>
+      <div class="err" id="gateerr"></div>
+    </div>
   </div>
 
-  <section>
-    <h2>Configuração (/etc/vpn-split/config.toml)</h2>
-    <details>
-      <summary class="muted" style="cursor:pointer">mostrar / editar</summary>
-      <textarea id="cfg" spellcheck="false"></textarea>
-      <div style="margin-top:10px;display:flex;gap:8px">
-        <button class="primary" onclick="saveCfg()">Salvar e aplicar</button>
-        <button onclick="loadCfg()">Recarregar</button>
-        <span class="muted" id="cfgmsg"></span>
-      </div>
-    </details>
-  </section>
+  <header>
+    <h1>vpn-split</h1>
+    <span class="muted" id="wifi">carregando…</span>
+    <span class="muted" id="profile"></span>
+    <span class="spacer"></span>
+    <label class="switch">
+      <input type="checkbox" id="fb" onchange="setFallback(this.checked)">
+      fallback UDP (túneis via Mullvad)
+    </label>
+    <button onclick="act('profile-apply')">Reaplicar perfil</button>
+    <button onclick="act('apply')">Aplicar</button>
+  </header>
 
-  <section>
-    <h2>Log</h2>
-    <pre id="log">…</pre>
-  </section>
-</main>
-<script>
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const getToken = () => localStorage.getItem('vpn-token') || '';
+  <main>
+    <div id="banner"></div>
+    <div class="err" id="err"></div>
+    <div class="cards" id="cards"></div>
 
-(function () {
-  const q = new URLSearchParams(location.search);
-  const t = q.get('token');
-  if (t) { localStorage.setItem('vpn-token', t); history.replaceState(null, '', location.pathname); }
-})();
+    <section>
+      <h2>Conexões (tempo real)</h2>
+      <div class="livegrid" id="live"></div>
+    </section>
 
-function gateCheck() {
-  if (getToken()) { $('gate').style.display = 'none'; return true; }
-  $('gate').style.display = 'flex'; return false;
-}
-function setToken() {
-  const v = $('tok').value.trim();
-  if (!v) return;
-  localStorage.setItem('vpn-token', v);
-  location.reload();
-}
+    <div class="grid2">
+      <section>
+        <h2>Rotas administradas (main)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Prefixo</th>
+              <th>Via</th>
+              <th>Dev</th>
+              <th>Origem</th>
+            </tr>
+          </thead>
+          <tbody id="routes"></tbody>
+        </table>
+        <div id="fulltunnel"></div>
+      </section>
 
-async function api(path, opts = {}) {
-  const t = getToken();
-  const sep = path.includes('?') ? '&' : '?';
-  const url = path + (t ? sep + 'token=' + encodeURIComponent(t) : '');
-  const r = await fetch(url, { cache: 'no-store', ...opts });
-  const txt = await r.text();
-  let data; try { data = JSON.parse(txt); } catch { data = { error: txt }; }
-  if (!r.ok) throw new Error(data.error || txt);
-  return data;
-}
+      <section>
+        <h2>Saúde</h2>
+        <table><tbody id="health"></tbody></table>
+        <div class="muted" id="dns" style="margin-top:10px"></div>
+      </section>
+    </div>
 
-async function act(action, extra = {}) {
-  try {
-    await api('/api/action', { method:'POST', headers:{'Content-Type':'application/json'},
-                               body: JSON.stringify({ action, ...extra }) });
-    $('err').textContent = '';
-  } catch (e) { $('err').textContent = 'Erro: ' + e.message; }
-  setTimeout(refresh, 1000);
-}
+    <section>
+      <h2>Configuração (<code>/etc/vpn-split/config.toml</code>)</h2>
+      <details>
+        <summary class="muted" style="cursor:pointer">mostrar / editar</summary>
+        <textarea id="cfg" spellcheck="false"></textarea>
+        <div class="actions" style="margin-top:10px">
+          <button class="primary" onclick="saveCfg()">Salvar e aplicar</button>
+          <button onclick="loadCfg()">Recarregar</button>
+          <span class="muted" id="cfgmsg"></span>
+        </div>
+      </details>
+    </section>
 
-async function ctl(target, up, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = up ? 'ligando…' : 'desligando…'; }
-  const extra = { target, up };
-  if (up && target.startsWith('pritunl:')) {
-    const v = prompt('Senha/OTP do Pritunl (deixe vazio se a sessão ainda é válida):');
-    if (v === null) { if (btn) { btn.disabled = false; btn.textContent = 'Ligar'; } return; }
-    if (v) extra.pw = v;
-  }
-  await act('ctl', extra);
-}
+    <section>
+      <h2>Log</h2>
+      <pre id="log">…</pre>
+    </section>
+  </main>
 
-async function setFallback(on) { await act('fallback', { on }); }
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(
+      /[&<>"]/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]),
+    );
+    const getToken = () => localStorage.getItem('vpn-token') || '';
 
-function render(d) {
-  $('wifi').textContent = `${d.wifi.iface} · gw ${d.wifi.gateway || '-'} · DNS ${d.wifi.dns.join(', ') || '-'}`;
-  $('profile').textContent = `Perfil ${d.profile.name} · SSID '${d.profile.ssid}'`;
-  $('fb').checked = !!d.fallback;
+    (function bootstrapToken() {
+      const q = new URLSearchParams(location.search);
+      const t = q.get('token');
+      if (t) {
+        localStorage.setItem('vpn-token', t);
+        history.replaceState(null, '', location.pathname);
+      }
+    })();
 
-  $('banner').innerHTML = (d.netns.status || '').includes('NeedsLogin')
-    ? '<div class="banner">NetBird H2O precisa de login: <code>sudo vpn-split netns-login</code> (uma vez)</div>'
-    : '';
+    function gateCheck() {
+      if (getToken()) {
+        $('gate').style.display = 'none';
+        return true;
+      }
+      $('gate').style.display = 'flex';
+      return false;
+    }
 
-  $('cards').innerHTML = d.controls.map(c => `
-    <div class="card ${c.active ? 'on' : ''}">
-      <div class="row"><strong>${esc(c.name)}</strong>
-        <span class="pill ${c.active ? 'pon' : 'poff'}">${c.active ? 'ligado' : 'desligado'}</span></div>
-      <div class="muted">${esc(c.detail)}</div>
-      ${c.note ? `<div class="note">${esc(c.note)}</div>` : ''}
-      <div class="actions">
-        ${c.active
-          ? `<button class="danger" onclick="ctl('${esc(c.target)}', false, this)">Desligar</button>`
-          : `<button class="primary" onclick="ctl('${esc(c.target)}', true, this)">Ligar</button>`}
-      </div>
-    </div>`).join('');
+    function setToken() {
+      const v = $('tok').value.trim();
+      if (!v) return;
+      localStorage.setItem('vpn-token', v);
+      location.reload();
+    }
 
-  $('routes').innerHTML = d.routes.length ? d.routes.map(r => `
-    <tr><td><code>${esc(r.prefix)}</code></td><td>${esc(r.via || '-')}</td>
-        <td><code>${esc(r.dev)}</code></td><td class="muted">${esc(r.source)}</td></tr>`).join('')
-    : '<tr><td colspan="4" class="muted">nenhuma</td></tr>';
+    async function api(path, opts = {}) {
+      const t = getToken();
+      const sep = path.includes('?') ? '&' : '?';
+      const url = path + (t ? sep + 'token=' + encodeURIComponent(t) : '');
+      const r = await fetch(url, { cache: 'no-store', ...opts });
+      const txt = await r.text();
+      let data;
+      try { data = JSON.parse(txt); } catch { data = { error: txt }; }
+      if (!r.ok) throw new Error(data.error || txt);
+      return data;
+    }
 
-  $('fulltunnel').innerHTML = d.full_tunnel.length
-    ? `<div class="note" style="color:#ff8b87;margin-top:10px">full-tunnel ativo: ${d.full_tunnel.map(r => esc(r.prefix + ' dev ' + r.dev)).join(', ')}</div>`
-    : '';
+    async function act(action, extra = {}) {
+      try {
+        await api('/api/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, ...extra }),
+        });
+        $('err').textContent = '';
+      } catch (e) {
+        $('err').textContent = 'Erro: ' + e.message;
+      }
+      setTimeout(refresh, 1000);
+    }
 
-  const mv = d.mullvad;
-  $('health').innerHTML = `
-    <tr><td>Mullvad</td><td>${mv.connected ? '<span class="pill pon">conectada</span>' : '<span class="pill poff">desligada</span>'}</td></tr>
-    <tr><td>Exclusões nft</td><td>${mv.connected ? `${mv.nft_elements} prefixos · regra ${mv.nft_rule ? 'ok' : '<b style="color:#ff8b87">ausente</b>'}` : '-'}</td></tr>
-    <tr><td>Docker</td><td>${d.docker.join(', ') || '-'}${d.docker_clash.length ? ' <b style="color:#ff8b87">conflito!</b>' : ''}</td></tr>
-    <tr><td>Conflitos VPN</td><td>${d.conflicts.length ? esc(d.conflicts.join(' · ')) : 'nenhum'}</td></tr>
-    <tr><td>NetBird H2O</td><td>${d.netns.exists ? 'netns ativo' : 'ausente'}</td></tr>
-    <tr><td>Bypass Wi-Fi</td><td>${d.pins.count} IPs (${Object.entries(d.pins.kinds).map(([k,v]) => k + ': ' + v).join(' · ')})</td></tr>`;
+    async function ctl(target, up, btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = up ? 'ligando…' : 'desligando…';
+      }
+      const extra = { target, up };
+      if (up && target.startsWith('pritunl:')) {
+        const v = prompt('Senha/OTP do Pritunl (deixe vazio se a sessão ainda é válida):');
+        if (v === null) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Ligar'; }
+          return;
+        }
+        if (v) extra.pw = v;
+      }
+      await act('ctl', extra);
+    }
 
-  $('dns').textContent = 'DNS roteado: ' + Object.entries(d.dns).map(([k,v]) => `${k}: ${v.join(' ')}`).join(' | ');
-}
+    async function setFallback(on) {
+      await act('fallback', { on });
+    }
 
-async function refresh() {
-  if (!gateCheck()) return;
-  try {
-    const d = await api('/api/status');
-    render(d);
-    $('err').textContent = '';
-  } catch (e) { $('err').textContent = 'Erro ao atualizar: ' + e.message; }
-  try {
-    const l = await api('/api/log');
-    $('log').textContent = l.log || '';
-  } catch {}
-}
+    function render(d) {
+      $('wifi').textContent =
+        `${d.wifi.iface} · gw ${d.wifi.gateway || '-'} · DNS ${d.wifi.dns.join(', ') || '-'}`;
+      $('profile').textContent = `Perfil ${d.profile.name} · SSID '${d.profile.ssid}'`;
+      $('fb').checked = !!d.fallback;
 
-async function loadCfg() {
-  try {
-    const c = await api('/api/config');
-    $('cfg').value = c.text;
-    $('cfgmsg').textContent = '';
-  } catch (e) { $('cfgmsg').textContent = e.message; }
-}
+      $('banner').innerHTML = (d.netns.status || '').includes('NeedsLogin')
+        ? '<div class="banner">NetBird precisa de login: ' +
+          '<code>sudo vpn-split netns-login</code> (uma vez)</div>'
+        : '';
 
-async function saveCfg() {
-  try {
-    await api('/api/config', { method:'POST', headers:{'Content-Type':'application/json'},
-                               body: JSON.stringify({ text: $('cfg').value }) });
-    $('cfgmsg').textContent = 'salvo e aplicado';
-    setTimeout(refresh, 800);
-  } catch (e) { $('cfgmsg').textContent = 'erro: ' + e.message; }
-}
+      $('cards').innerHTML = d.controls.map((c) => `
+        <div class="card ${c.active ? 'on' : ''}">
+          <div class="row">
+            <strong>${esc(c.name)}</strong>
+            <span class="pill ${c.active ? 'pon' : 'poff'}">${c.active ? 'ligado' : 'desligado'}</span>
+          </div>
+          <div class="muted">${esc(c.detail)}</div>
+          ${c.note ? `<div class="note">${esc(c.note)}</div>` : ''}
+          <div class="actions">
+            ${c.active
+              ? `<button class="danger" onclick="ctl('${esc(c.target)}', false, this)">Desligar</button>`
+              : `<button class="primary" onclick="ctl('${esc(c.target)}', true, this)">Ligar</button>`}
+          </div>
+        </div>`).join('');
 
-async function refreshLive() {
-  if (!gateCheck()) return;
-  try {
-    const d = await api('/api/live');
-    $('live').innerHTML = (d.services || []).map(s => {
-      const cls = s.connected ? 'on' : 'off';
-      const peers = (s.peers || []).length
-        ? s.peers.map(p => {
-            const ps = (p.status === 'Connected' || p.status === 'up') ? 'on'
-                     : (p.status === 'Idle') ? 'idle' : 'off';
-            const info = (p.age != null) ? p.age + 's' : (p.latency || p.status || '');
-            return '<div class="peer"><span class="dot ' + ps + '"></span> '
-                 + esc(p.name || p.ip)
-                 + ' <span class="muted">' + esc(p.ip) + ' ' + esc(info) + '</span></div>';
-          }).join('')
-        : '<div class="peer muted">sem peers</div>';
-      return '<div class="livecard ' + cls + '">'
-           + '<div class="row"><strong>' + esc(s.label) + '</strong>'
-           + '<span class="dot ' + cls + '"></span></div>'
-           + '<div class="muted">' + esc(s.self_ip || s.fqdn || s.detail || s.type) + '</div>'
-           + peers + '</div>';
-    }).join('') || '<div class="muted">carregando…</div>';
-  } catch (e) { $('live').innerHTML = ''; }
-}
+      $('routes').innerHTML = d.routes.length
+        ? d.routes.map((r) => `
+            <tr>
+              <td><code>${esc(r.prefix)}</code></td>
+              <td>${esc(r.via || '-')}</td>
+              <td><code>${esc(r.dev)}</code></td>
+              <td class="muted">${esc(r.source)}</td>
+            </tr>`).join('')
+        : '<tr><td colspan="4" class="muted">nenhuma</td></tr>';
 
-refresh(); loadCfg();
-setInterval(refresh, 5000);
-setInterval(refreshLive, 5000);
-</script>
-</body></html>
+      $('fulltunnel').innerHTML = d.full_tunnel.length
+        ? `<div class="err" style="margin-top:10px">full-tunnel ativo: ` +
+          `${d.full_tunnel.map((r) => esc(r.prefix + ' dev ' + r.dev)).join(', ')}</div>`
+        : '';
+
+      const mv = d.mullvad;
+      $('health').innerHTML = `
+        <tr><td>Mullvad</td><td>${mv.connected
+          ? '<span class="pill pon">conectada</span>'
+          : '<span class="pill poff">desligada</span>'}</td></tr>
+        <tr><td>Exclusões nft</td><td>${mv.connected
+          ? `${mv.nft_elements} prefixos · regra ${mv.nft_rule ? 'ok' : '<b class="err">ausente</b>'}`
+          : '-'}</td></tr>
+        <tr><td>Docker</td><td>${d.docker.join(', ') || '-'}${d.docker_clash.length ? ' <b class="err">conflito!</b>' : ''}</td></tr>
+        <tr><td>Conflitos VPN</td><td>${d.conflicts.length ? esc(d.conflicts.join(' · ')) : 'nenhum'}</td></tr>
+        <tr><td>NetBird H2O</td><td>${d.netns.exists ? 'netns ativo' : 'ausente'}</td></tr>
+        <tr><td>Bypass Wi-Fi</td><td>${d.pins.count} IPs (${Object.entries(d.pins.kinds)
+          .map(([k, v]) => k + ': ' + v).join(' · ')})</td></tr>`;
+
+      $('dns').textContent = 'DNS roteado: ' +
+        Object.entries(d.dns).map(([k, v]) => `${k}: ${v.join(' ')}`).join(' | ');
+    }
+
+    async function refresh() {
+      if (!gateCheck()) return;
+      try {
+        render(await api('/api/status'));
+        $('err').textContent = '';
+      } catch (e) {
+        $('err').textContent = 'Erro ao atualizar: ' + e.message;
+      }
+      try {
+        const l = await api('/api/log');
+        $('log').textContent = l.log || '';
+      } catch {}
+    }
+
+    async function loadCfg() {
+      try {
+        $('cfg').value = (await api('/api/config')).text;
+        $('cfgmsg').textContent = '';
+      } catch (e) {
+        $('cfgmsg').textContent = e.message;
+      }
+    }
+
+    async function saveCfg() {
+      try {
+        await api('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: $('cfg').value }),
+        });
+        $('cfgmsg').textContent = 'salvo e aplicado';
+        setTimeout(refresh, 800);
+      } catch (e) {
+        $('cfgmsg').textContent = 'erro: ' + e.message;
+      }
+    }
+
+    async function refreshLive() {
+      if (!gateCheck()) return;
+      try {
+        const d = await api('/api/live');
+        $('live').innerHTML = (d.services || []).map((s) => {
+          const cls = s.connected ? 'on' : 'off';
+          const peers = (s.peers || []).length
+            ? s.peers.map((p) => {
+                const ps = (p.status === 'Connected' || p.status === 'up') ? 'on'
+                  : (p.status === 'Idle') ? 'idle' : 'off';
+                const info = (p.age != null) ? p.age + 's' : (p.latency || p.status || '');
+                return '<div class="peer"><span class="dot ' + ps + '"></span> ' +
+                  esc(p.name || p.ip) +
+                  ' <span class="muted">' + esc(p.ip) + ' ' + esc(info) + '</span></div>';
+              }).join('')
+            : '<div class="peer muted">sem peers</div>';
+          return '<div class="livecard ' + cls + '">' +
+            '<div class="row"><strong>' + esc(s.label) + '</strong>' +
+            '<span class="dot ' + cls + '"></span></div>' +
+            '<div class="muted">' + esc(s.self_ip || s.fqdn || s.detail || s.type) + '</div>' +
+            peers + '</div>';
+        }).join('') || '<div class="muted">carregando…</div>';
+      } catch (e) {
+        $('live').innerHTML = '';
+      }
+    }
+
+    refresh();
+    loadCfg();
+    setInterval(refresh, 5000);
+    setInterval(refreshLive, 5000);
+  </script>
+</body>
+</html>
 """
 
 
