@@ -222,15 +222,15 @@ DEFAULT_VPN_REGISTRY: list[dict] = [
      "priority": 20, "routes": [], "manual": True, "exit": False,
      "control": "wg-quick@wg_casa", "label": "WireGuard casa",
      "detail": "10.13.13.0/24 · 192.168.123.0/24"},
-    {"name": "netbird-h2o", "type": "netbird", "iface": "wt0",
+    {"name": "netbird-pessoal", "type": "netbird", "iface": "wt0",
      "priority": 30, "routes": [], "manual": False, "exit": False,
-     "control": "netbird", "label": "NetBird H2O",
-     "detail": "host (wt0) — netbird.h2oinnovation.digital"},
-    {"name": "netbird-pessoal", "type": "netbird-netns", "iface": "nbh2o0",
+     "control": "netbird", "label": "NetBird pessoal",
+     "detail": "host (wt0) — netbird.kolpzs.com"},
+    {"name": "netbird-h2o", "type": "netbird-netns", "iface": "nbh2o0",
      "priority": 40, "routes": [], "manual": False, "exit": False,
      "control": "vpn-split-nbh2o", "netns": "nbh2o",
      "requires": ["vpn-split-netns", "vpn-split-nbh2o-dns"],
-     "label": "NetBird pessoal", "detail": "netns — netbird.kolpzs.com"},
+     "label": "NetBird H2O", "detail": "netns — netbird.h2oinnovation.digital"},
 ]
 
 
@@ -1301,8 +1301,9 @@ def netns_status(cfg: dict) -> int:
 
 def netns_login(cfg: dict) -> int:
     name = cfg["netns"].get("name", "nbh2o")
+    prof = cfg["netns"].get("profile", "H2O")
     sock = "unix:///run/vpn-split/netbird-h2o.sock"
-    log("abrindo fluxo de login SSO do NetBird H2O (conclua no navegador)...")
+    log(f"abrindo fluxo de login SSO do NetBird do netns ({prof}) — conclua no navegador...")
     return subprocess.call(["ip", "netns", "exec", name, "netbird",
                             "--daemon-addr", sock, "up"])
 
